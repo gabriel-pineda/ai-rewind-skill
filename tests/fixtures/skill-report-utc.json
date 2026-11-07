@@ -1,0 +1,69 @@
+{
+  "skill": "1.0.0",
+  "range": {
+    "since": "2026-01-01",
+    "until": "2026-12-31",
+    "firstDay": "2026-03-02",
+    "lastDay": "2026-06-21"
+  },
+  "stats": {
+    "conversations": 4,
+    "messages": 11,
+    "assistantMessages": 4,
+    "activeDays": 6,
+    "streak": 4,
+    "streakStart": "2026-03-02",
+    "streakEnd": "2026-03-05",
+    "busiestDay": "2026-06-20",
+    "busiestDayMessages": 4,
+    "latestClock": "03:47",
+    "typicalHour": 14,
+    "nightShare": 18,
+    "wordsYou": 103,
+    "wordsAi": 23,
+    "thankYous": 3,
+    "sorrys": 1,
+    "absolutelyRight": 2,
+    "greatQuestions": 1,
+    "tokensOut": 110,
+    "models": ["opus-5.5", "haiku-3.5"],
+    "toolUsePerAssistantMessage": 0.75,
+    "medianWords": 6,
+    "thanksPer100": 27.27,
+    "persona": "BDSP",
+    "personaName": "The Polite Shipper",
+    "personaLine": "Ships by daylight, in few words, and still says thanks.",
+    "rankPercent": 90,
+    "power": "Rookie"
+  },
+  "seeds": [
+    "Said thanks 3 times, 2 of them after 2 AM",
+    "Top project took 64% of all messages",
+    "4 messages on Jun 20"
+  ],
+  "projects": [
+    {
+      "name": "app",
+      "share": 64
+    },
+    {
+      "name": "other",
+      "share": 36
+    }
+  ],
+  "months": [
+    {
+      "month": "Mar",
+      "messages": 6,
+      "activeDays": 4,
+      "topProject": "app"
+    },
+    {
+      "month": "Jun",
+      "messages": 5,
+      "activeDays": 2,
+      "topProject": "other"
+    }
+  ],
+  "url": "https://example.test/r?v=1&p=claude-code&m=receipts&a=0&y=2026&c=4&mg=11&d=6&s=4&sr=03-02..03-05&bd=06-20&bm=4&lh=03%3A47&th=14&ns=18&wu=103&wa=23&t=app%3A64%2Cother%3A36&ty=3&so=1&ar=2&pc=BDSP&rk=90&pl=Rookie&tk=110&md=opus-5.5%2Chaiku-3.5&src=skill"
+}

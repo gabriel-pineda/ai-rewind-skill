@@ -1,9 +1,22 @@
+import json
+import os
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 import rewind
-from helpers import CLAUDE, CODEX, HISTORY_ONLY, cli, report
+from helpers import CLAUDE, CODEX, FIXTURES, HISTORY_ONLY, cli, report, web_repo
+
+
+def json_of(*args):
+    done = cli(*args, "--json")
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def persona(code):
+    entry = rewind.load_persona_table()["types"][code]
+    return {"persona": code, "personaName": entry["name"], "personaLine": entry["line"]}
 
 
 def test_fixture_numbers_are_exact():
@@ -226,3 +239,230 @@ def test_git_root_wins(tmp_path):
 def test_home_folder_name_never_shows_when_home_is_a_repo(tmp_path):
     (tmp_path / ".git").mkdir()
     assert rewind.ProjectNames(str(tmp_path)).name(str(tmp_path)) == "home"
+
+
+# --- Exact numbers on the fixtures (Wave 3, T1) -------------------------------------------------------
+# Every number below was worked out by hand from tests/make_fixtures.py, not copied from a run.
+# The human prompts in UTC: S1 03-02 09:00 (9 words), 09:10 (4, thanks), 03-03 10:00 (9, fix),
+# 03-04 23:30 (7, sorry); S2 03-05 02:15 (11, thank you), 03:47 (6, cheers, fixed); S3 06-20 14:00 (43),
+# 14:05 (2), 14:10 (4), 15:00 (4); S5 06-21 08:00 (4). S4 is 2025-12-31 23:59 UTC (7 words).
+
+
+SHARED_REPORT = os.path.join(FIXTURES, "skill-report-utc.json")
+
+
+def test_full_report_matches_the_shared_fixture():
+    """The web repo decodes this report's url and checks it against these stats (tests/unit/skill-url.test.ts)."""
+    with open(SHARED_REPORT, encoding="utf-8") as handle:
+        assert report("--site", "https://example.test") == json.load(handle)
+
+
+@pytest.mark.skipif(not web_repo(), reason="the web repo is private, so this runs only on a dev machine")
+def test_shared_report_copy_matches_the_web_repo():
+    web_copy = os.path.join(web_repo(), "tests", "fixtures", "skill-report-utc.json")
+    with open(web_copy, encoding="utf-8") as web, open(SHARED_REPORT, encoding="utf-8") as copy:
+        assert web.read() == copy.read()
+
+
+def test_default_url_is_exact():
+    done = cli("--claude-dir", CLAUDE, "--tz", "UTC")
+    assert done.returncode == 0
+    assert done.stdout == (
+        rewind.DEFAULT_SITE + "/r?v=1&p=claude-code&m=receipts&a=0&y=2026&c=4&mg=11&d=6&s=4&sr=03-02..03-05"
+        "&bd=06-20&bm=4&lh=03%3A47&th=14&ns=18&wu=103&wa=23&t=app%3A64%2Cother%3A36&ty=3&so=1&ar=2&pc=BDSP"
+        "&rk=90&pl=Rookie&tk=110&md=opus-5.5%2Chaiku-3.5&src=skill\n"
+    )
+
+
+def test_months_are_exact():
+    assert report()["months"] == [
+        {"month": "Mar", "messages": 6, "activeDays": 4, "topProject": "app"},
+        {"month": "Jun", "messages": 5, "activeDays": 2, "topProject": "other"},
+    ]
+
+
+def test_melbourne_numbers_are_exact():
+    """AEDT (+11) in January and March, AEST (+10) in June. S4 moves into 2026-01-01, S3 into 06-21 after midnight."""
+    data = report("--tz", "Australia/Melbourne")
+    assert data["stats"] == {
+        "conversations": 5,  # S4 joins.
+        "messages": 12,
+        "assistantMessages": 4,
+        "activeDays": 5,  # 01-01, 03-02, 03-03, 03-05, 06-21. 03-04 23:30 UTC is 03-05 10:30.
+        "streak": 2,
+        "streakStart": "2026-03-02",
+        "streakEnd": "2026-03-03",
+        "busiestDay": "2026-06-21",  # S3 (00:00 to 01:00) and S5 (18:00).
+        "busiestDayMessages": 5,
+        "latestClock": "01:00",  # 15:00 UTC on 06-20.
+        "typicalHour": 0,  # 00:00, 00:05 and 00:10.
+        "nightShare": 33,  # 4 of 12.
+        "wordsYou": 110,  # 103 plus the 7 words of S4.
+        "wordsAi": 23,
+        "thankYous": 3,
+        "sorrys": 1,
+        "absolutelyRight": 2,
+        "greatQuestions": 1,
+        "tokensOut": 110,
+        "models": ["opus-5.5", "haiku-3.5"],
+        "toolUsePerAssistantMessage": 0.75,
+        "medianWords": 6.5,  # 12 counts: the middle two are 6 and 7.
+        "thanksPer100": 25.0,
+        **persona("BNSP"),  # Night share 33 is at least 25.
+        "rankPercent": 90,
+        "power": "Rookie",
+    }
+    assert data["range"] == {
+        "since": "2026-01-01",
+        "until": "2026-12-31",
+        "firstDay": "2026-01-01",
+        "lastDay": "2026-06-21",
+    }
+    assert data["projects"] == [{"name": "app", "share": 58}, {"name": "other", "share": 42}]
+    assert data["months"] == [
+        {"month": "Jan", "messages": 1, "activeDays": 1, "topProject": "other"},
+        {"month": "Mar", "messages": 6, "activeDays": 3, "topProject": "app"},
+        {"month": "Jun", "messages": 5, "activeDays": 1, "topProject": "other"},
+    ]
+    # No thanks after 2 AM in Melbourne, so that seed gives way to the words seed.
+    assert data["seeds"] == [
+        "Top project took 58% of all messages",
+        "5 messages on Jun 21",
+        "opus-5.5 wrote 23 words; you wrote 110",
+    ]
+
+
+def test_since_june_numbers_are_exact():
+    data = report("--since", "2026-06-01")
+    assert data["stats"] == {
+        "conversations": 2,  # S3 and S5.
+        "messages": 5,
+        "assistantMessages": 1,  # msg_004 only.
+        "activeDays": 2,
+        "streak": 2,
+        "streakStart": "2026-06-20",
+        "streakEnd": "2026-06-21",
+        "busiestDay": "2026-06-20",
+        "busiestDayMessages": 4,
+        "latestClock": "15:00",
+        "typicalHour": 14,
+        "nightShare": 0,
+        "wordsYou": 57,  # 43 + 2 + 4 + 4 + 4.
+        "wordsAi": 4,
+        "thankYous": 0,
+        "sorrys": 0,
+        "absolutelyRight": 0,
+        "greatQuestions": 1,
+        "tokensOut": 25,
+        "models": ["haiku-3.5"],
+        "toolUsePerAssistantMessage": 0.0,
+        "medianWords": 4,
+        "thanksPer100": 0.0,
+        **persona("TDSR"),
+        "rankPercent": 90,
+        "power": "Rookie",
+    }
+    assert data["projects"] == [{"name": "other", "share": 80}, {"name": "app", "share": 20}]
+    assert data["seeds"] == [
+        "Top project took 80% of all messages",
+        "4 messages on Jun 20",
+        "haiku-3.5 wrote 4 words; you wrote 57",
+    ]
+    assert "&ty=0&so=0&ar=0&" in data["url"]
+
+
+def test_codex_numbers_are_exact():
+    data = json_of("--platform", "codex", "--codex-dir", CODEX, "--tz", "UTC")
+    assert data["stats"] == {
+        "conversations": 1,
+        "messages": 1,  # The response_item and the event_msg of one prompt count once.
+        "assistantMessages": 1,
+        "activeDays": 1,
+        "streak": 1,
+        "streakStart": "2026-04-10",
+        "streakEnd": "2026-04-10",
+        "busiestDay": "2026-04-10",
+        "busiestDayMessages": 1,
+        "latestClock": "01:00",
+        "typicalHour": 1,
+        "nightShare": 100,
+        "wordsYou": 7,
+        "wordsAi": 8,
+        "thankYous": 1,
+        "sorrys": 0,
+        "absolutelyRight": 0,  # "You're right" without "absolutely".
+        "greatQuestions": 0,
+        "tokensOut": 77,
+        "models": ["gpt-5.1-codex"],
+        "toolUsePerAssistantMessage": 1.0,  # One function_call.
+        "medianWords": 7,
+        "thanksPer100": 100.0,
+        **persona("BNSP"),
+        "rankPercent": 90,
+        "power": "Rookie",
+    }
+    assert data["projects"] == [{"name": "app", "share": 100}]
+    assert data["seeds"] == [
+        "Top project took 100% of all messages",
+        "1 message on Apr 10",
+        "gpt-5.1-codex wrote 8 words; you wrote 7",
+    ]
+    assert data["url"] == (
+        rewind.DEFAULT_SITE + "/r?v=1&p=codex&m=receipts&a=0&y=2026&c=1&mg=1&d=1&s=1&sr=04-10..04-10&bd=04-10"
+        "&bm=1&lh=01%3A00&th=1&ns=100&wu=7&wa=8&t=app%3A100&ty=1&so=0&ar=0&pc=BNSP&rk=90&pl=Rookie&tk=77"
+        "&md=gpt-5.1-codex&src=skill"
+    )
+
+
+def test_history_only_numbers_are_exact():
+    """history.jsonl has prompts only: no assistant numbers, and /clear is not a prompt."""
+    data = json_of("--claude-dir", HISTORY_ONLY, "--tz", "UTC")
+    assert data["stats"] == {
+        "conversations": 2,
+        "messages": 2,
+        "assistantMessages": 0,
+        "activeDays": 2,
+        "streak": 2,
+        "streakStart": "2026-03-02",
+        "streakEnd": "2026-03-03",
+        "busiestDay": "2026-03-02",
+        "busiestDayMessages": 1,
+        "latestClock": "09:00",
+        "typicalHour": 9,
+        "nightShare": 0,
+        "wordsYou": 7,
+        "wordsAi": 0,
+        "thankYous": 1,
+        "sorrys": 0,
+        "absolutelyRight": 0,
+        "greatQuestions": 0,
+        "tokensOut": 0,
+        "models": [],
+        "toolUsePerAssistantMessage": 0,
+        "medianWords": 3.5,
+        "thanksPer100": 50.0,
+        **persona("TDSP"),
+        "rankPercent": 90,
+        "power": "Rookie",
+    }
+    assert data["seeds"] == ["Top project took 100% of all messages", "1 message on Mar 2", "Said thanks 1 time"]
+    assert data["url"] == (
+        rewind.DEFAULT_SITE + "/r?v=1&p=claude-code&m=receipts&a=0&y=2026&c=2&mg=2&d=2&s=2&sr=03-02..03-03"
+        "&bd=03-02&bm=1&lh=09%3A00&th=9&ns=0&wu=7&t=app%3A100&ty=1&so=0&pc=TDSP&rk=90&pl=Rookie&src=skill"
+    )
+
+
+def test_anon_changes_only_the_project_names():
+    plain, anon = report(), report("--anon")
+    assert anon["stats"] == plain["stats"]
+    assert anon["seeds"] == plain["seeds"]
+    assert anon["projects"] == [{"name": "Project A", "share": 64}, {"name": "Project B", "share": 36}]
+    assert anon["url"] == plain["url"].replace("t=app%3A64%2Cother%3A36", "t=Project+A%3A64%2CProject+B%3A36")
+
+
+@pytest.mark.parametrize(
+    "count,word,text",
+    [(0, "time", "0 times"), (1, "time", "1 time"), (2, "message", "2 messages"), (1, "word", "1 word")],
+)
+def test_seed_plurals(count, word, text):
+    assert rewind.plural(count, word) == text

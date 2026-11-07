@@ -7,7 +7,7 @@ import pytest
 
 import rewind
 import urlspec
-from helpers import CLAUDE, FIXTURES, REPO, cli, report
+from helpers import CLAUDE, FIXTURES, cli, report, web_repo
 
 
 def run_url(*args):
@@ -273,9 +273,8 @@ def fields_from_rewind_data(data):
 
 
 FIXTURE_COPY = os.path.join(FIXTURES, "codec-fixtures.json")
-WEB_FIXTURE = os.path.join(
-    os.path.dirname(REPO), "ai-rewind", "src", "lib", "codec", "__fixtures__", "codec-fixtures.json"
-)
+WEB = web_repo()
+WEB_FIXTURE = os.path.join(WEB, "src", "lib", "codec", "__fixtures__", "codec-fixtures.json") if WEB else ""
 
 with open(FIXTURE_COPY, encoding="utf-8") as handle:
     SHARED = json.load(handle)

@@ -718,6 +718,11 @@ def month_facts(tally: Tally, labels: Dict[str, str], anon: bool) -> List[dict]:
     return facts
 
 
+def plural(count: int, word: str) -> str:
+    """1 message, 2 messages. Claude copies the seeds into the roast, so the grammar must be right."""
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
 def roast_seeds(tally: Tally, stats: dict, projects: List[dict]) -> List[str]:
     """Three plain facts for the roast. Numbers, dates and model names only, never message text."""
     seeds: List[str] = []
@@ -733,19 +738,19 @@ def roast_seeds(tally: Tally, stats: dict, projects: List[dict]) -> List[str]:
     if night_starts and max(night_starts.values()) >= 3:
         seeds.append(f"Started {max(night_starts.values())} sessions after midnight in one week")
     if tally.late_thanks:
-        seeds.append(f"Said thanks {tally.thanks} times, {tally.late_thanks} of them after 2 AM")
+        seeds.append(f"Said thanks {plural(tally.thanks, 'time')}, {tally.late_thanks} of them after 2 AM")
     if longest >= 60:
         seeds.append(f"Longest session {longest // 60} h {longest % 60} m on a {WEEKDAYS[longest_day.weekday()]}")
     if tally.fixes >= 5:
-        seeds.append(f"Asked to 'fix' something {tally.fixes} times")
+        seeds.append(f"Asked to 'fix' something {plural(tally.fixes, 'time')}")
     if projects and projects[0]["share"] >= 40:
         seeds.append(f"Top project took {projects[0]['share']}% of all messages")
     busiest = date.fromisoformat(stats["busiestDay"])
-    seeds.append(f"{stats['busiestDayMessages']} messages on {month_day(busiest)}")
+    seeds.append(f"{plural(stats['busiestDayMessages'], 'message')} on {month_day(busiest)}")
     if stats["models"] and stats["wordsAi"]:
-        seeds.append(f"{stats['models'][0]} wrote {stats['wordsAi']} words; you wrote {stats['wordsYou']}")
+        seeds.append(f"{stats['models'][0]} wrote {plural(stats['wordsAi'], 'word')}; you wrote {stats['wordsYou']}")
     if not tally.late_thanks:
-        seeds.append(f"Said thanks {tally.thanks} times")
+        seeds.append(f"Said thanks {plural(tally.thanks, 'time')}")
     return seeds[:3]
 
 
@@ -785,24 +790,62 @@ def strip_quotes(text: str) -> str:
     return text if text[0] in inner or text[-1] in inner else inner
 
 
+ESCAPE_RUN_RE = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
+# The characters of \s in JavaScript. str.split() also splits on \x1c-\x1f and \x85, which tidyText removes
+# as control characters instead, and it keeps \ufeff, which tidyText turns into a space.
+JS_SPACE_RE = re.compile("[\t\n\x0b\x0c\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+")
+
+
+def decode_escape_run(match) -> str:
+    """Decodes a run such as %E6%97%A5. A byte that starts no valid UTF-8 character stays as it is."""
+    tokens = re.findall(r"%[0-9A-Fa-f]{2}", match.group(0))
+    out, index = [], 0
+    while index < len(tokens):
+        for size in range(min(4, len(tokens) - index), 0, -1):
+            chunk = bytes(int(token[1:], 16) for token in tokens[index : index + size])
+            try:
+                out.append(chunk.decode("utf-8"))
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            out.append(tokens[index])
+            size = 1
+        index += size
+    return "".join(out)
+
+
+def percent_decode(text: str) -> str:
+    """The percent step of tidyText. A doubly encoded value from the browser decodes the same way here."""
+    return ESCAPE_RUN_RE.sub(decode_escape_run, text)
+
+
 def clean_text(value: Optional[str], limit: int) -> str:
     """The same steps as tidyText in the web codec, so a decoded value stays the same."""
     text = value or ""
     previous = None
     while text != previous:
         previous = text
-        text = " ".join(text.split())
+        text = percent_decode(text)
+        text = JS_SPACE_RE.sub(" ", text)
         text = "".join(ch for ch in text if unicodedata.category(ch) not in ("Cc", "Cf", "Cs"))
-        text = " ".join(EMOJI_RE.sub("", text).split())
-        text = strip_quotes(strip_link_leak(text)).strip()
+        text = re.sub(" {2,}", " ", EMOJI_RE.sub("", text)).strip(" ")
+        text = strip_quotes(strip_link_leak(text)).strip(" ")
     return "" if NO_VALUE_RE.match(text) else cap(text, limit)
 
 
 def clean_name(value: Optional[str]) -> str:
-    """First names: letters, marks, space, hyphen and apostrophe."""
-    text = clean_text(value, 1000).replace(chr(0x2019), "'")
-    kept = "".join(ch for ch in text if ch in " '-" or unicodedata.category(ch)[0] in "LM")
-    return cap(" ".join(kept.split()), MAX_NAME)
+    """Same steps as cleanName in the web codec: letters, marks, space, hyphen and apostrophe, cut with no
+    ellipsis. A name with no letter, or a placeholder such as null, is no name."""
+    text = value or ""
+    previous = None
+    while text != previous:
+        previous = text
+        text = clean_text(text, 10**9).replace(chr(0x2019), "'")
+        text = " ".join("".join(ch for ch in text if ch in " '-" or unicodedata.category(ch)[0] in "LM").split())
+    if not any(unicodedata.category(ch)[0] == "L" for ch in text) or NO_VALUE_RE.match(text):
+        return ""
+    return text[:MAX_NAME].strip()
 
 
 def theme_name(value: str) -> str:
@@ -941,9 +984,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--since", type=parse_day, default=parse_day(DEFAULT_SINCE), help="first day, YYYY-MM-DD")
     parser.add_argument("--until", type=parse_day, default=parse_day(DEFAULT_UNTIL), help="last day, YYYY-MM-DD")
     parser.add_argument("--platform", choices=("claude-code", "codex"), default="claude-code")
-    parser.add_argument(
-        "--claude-dir", "--codex-dir", dest="log_dir", help="log folder, default ~/.claude or ~/.codex"
-    )
+    parser.add_argument("--claude-dir", "--codex-dir", dest="log_dir", help="log folder, default ~/.claude or ~/.codex")
     parser.add_argument("--tz", help="IANA time zone, default the system zone")
     parser.add_argument("--json", action="store_true", help="print stats, seeds and projects as JSON")
     parser.add_argument("--name", help="first name to show")

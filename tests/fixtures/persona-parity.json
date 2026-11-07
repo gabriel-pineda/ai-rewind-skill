@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "notes": "Shared by the web repo (tests/unit/persona-parity.test.ts, derivePersona) and the skill (tests/test_persona.py, persona_code). Each axis lists inputs with the letter they must give. Both sides build every combination of the four axes and check the four letters, so a change of a threshold or a comparison on one side fails both suites. null means the input is unknown. The night axis takes [nightShare, typicalHour]. `cases` are whole inputs with their code and name. Copy this file byte for byte into ai-rewind-skill/tests/fixtures.",
+  "axes": [
+    {
+      "inputs": ["toolUsePerAssistantMessage"],
+      "cases": [
+        [[null], "T"],
+        [[0], "T"],
+        [[0.5999], "T"],
+        [[0.6], "B"],
+        [[0.75], "B"],
+        [[12], "B"]
+      ]
+    },
+    {
+      "inputs": ["nightShare", "typicalHour"],
+      "cases": [
+        [[null, null], "D"],
+        [[0, 0], "D"],
+        [[24, 21], "D"],
+        [[24.99, 21], "D"],
+        [[18, 14], "D"],
+        [[0, 3], "D"],
+        [[25, null], "N"],
+        [[25, 0], "N"],
+        [[null, 22], "N"],
+        [[0, 22], "N"],
+        [[24, 23], "N"],
+        [[100, 23], "N"]
+      ]
+    },
+    {
+      "inputs": ["medianWords"],
+      "cases": [
+        [[null], "S"],
+        [[0], "S"],
+        [[39], "S"],
+        [[39.5], "S"],
+        [[40], "V"],
+        [[40.5], "V"],
+        [[500], "V"]
+      ]
+    },
+    {
+      "inputs": ["thanksPer100"],
+      "cases": [
+        [[null], "R"],
+        [[0], "R"],
+        [[1.99], "R"],
+        [[2], "P"],
+        [[27.27], "P"],
+        [[100], "P"]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "name": "skill fixture (tests/fixtures/claude, UTC)",
+      "inputs": {
+        "toolUsePerAssistantMessage": 0.75,
+        "nightShare": 18,
+        "typicalHour": 14,
+        "medianWords": 6,
+        "thanksPer100": 27.27
+      },
+      "code": "BDSP",
+      "personaName": "The Polite Shipper"
+    },
+    {
+      "name": "the full mock: thinker, night, verbose, polite",
+      "inputs": {
+        "toolUsePerAssistantMessage": 0.1,
+        "nightShare": 38,
+        "typicalHour": 23,
+        "medianWords": 52,
+        "thanksPer100": 3.2
+      },
+      "code": "TNVP",
+      "personaName": "The 3AM Architect"
+    },
+    {
+      "name": "the receipts mock: builder, night, verbose, polite",
+      "inputs": {
+        "toolUsePerAssistantMessage": 1.4,
+        "nightShare": 27,
+        "typicalHour": 22,
+        "medianWords": 41,
+        "thanksPer100": 2.75
+      },
+      "code": "BNVP",
+      "personaName": "The Night Shift Novelist"
+    },
+    {
+      "name": "Vibes mode has no tool count",
+      "inputs": {
+        "toolUsePerAssistantMessage": null,
+        "nightShare": 10,
+        "typicalHour": 9,
+        "medianWords": 12,
+        "thanksPer100": 0.5
+      },
+      "code": "TDSR",
+      "personaName": "The Quick Question"
+    },
+    {
+      "name": "every input unknown",
+      "inputs": {
+        "toolUsePerAssistantMessage": null,
+        "nightShare": null,
+        "typicalHour": null,
+        "medianWords": null,
+        "thanksPer100": null
+      },
+      "code": "TDSR",
+      "personaName": "The Quick Question"
+    }
+  ]
+}
