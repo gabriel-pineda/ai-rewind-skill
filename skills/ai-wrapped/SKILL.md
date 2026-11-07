@@ -9,7 +9,7 @@ This skill turns the user's local logs into one link that plays their year as a 
 
 ## What it does and never does
 
-- It reads log files under `~/.claude` only. It also checks whether a `.git` entry exists in the project folders named in the logs.
+- It reads log files under `~/.claude` (or `~/.codex` with `--platform codex`) only. It also checks whether a `.git` entry exists in the project folders named in the logs.
 - It uses no network. The script has no network code.
 - It never puts chat text in its output. The script prints numbers, dates, model names and project folder names.
 - The link holds the numbers in its query string. There is no account and no upload. The numbers reach the site only when someone opens the link.

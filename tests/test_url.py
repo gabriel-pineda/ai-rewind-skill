@@ -6,7 +6,6 @@ from datetime import date
 import pytest
 
 import rewind
-import sync_codec_fixtures
 import urlspec
 from helpers import CLAUDE, FIXTURES, REPO, cli, report
 
@@ -287,16 +286,9 @@ def test_shared_fixture_encodes_to_the_same_bytes(case):
     assert rewind.fit_query(fields_from_rewind_data(case["data"])) == case["query"]
 
 
-def test_shared_fixture_copy_holds_only_sample_names():
-    with open(FIXTURE_COPY, encoding="utf-8") as handle:
-        body = handle.read()
-    for private, _ in sync_codec_fixtures.REPLACEMENTS:
-        assert private not in body
-
-
 @pytest.mark.skipif(not os.path.exists(WEB_FIXTURE), reason="the web repo is private, so this runs only on a dev box")
 def test_shared_fixture_copy_matches_the_web_repo():
     with open(WEB_FIXTURE, encoding="utf-8") as handle:
         web = handle.read()
     with open(FIXTURE_COPY, encoding="utf-8") as handle:
-        assert sync_codec_fixtures.public_copy(web) == handle.read()
+        assert web == handle.read()

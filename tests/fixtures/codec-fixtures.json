@@ -153,6 +153,13 @@
       }
     },
     {
+      "name": "a percent sign keeps a decimal as a percent, and src=mock is not a link source",
+      "input": "p=claude&c=5&ns=0.5%25&src=mock",
+      "ok": true,
+      "missing": [],
+      "expected": { "nightShare": 1, "source": "prompt" }
+    },
+    {
       "name": "a template with empty keys left in",
       "input": "v=1&p=gemini&m=vibes&a=1&y=2026&n=&c=12&mg=&d=&s=&sr=&bd=&bm=&lh=&th=&ns=&wu=&wa=&t=&ty=&so=&ar=&pc=&pn=&pv=&mo=&ro=&co=&rk=&pl=",
       "ok": true,
