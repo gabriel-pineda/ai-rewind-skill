@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "notes": "Shared by the web codec (Vitest) and the Python skill. `encode`: `data` must encode to exactly `query`. `decode`: `input` must give `ok`, `missing` and every field in `expected`. Query text follows URLSearchParams: letters, digits and * - . _ stay as they are, a space becomes +, every other byte is %XX in upper case, so ~ is %7E. Python: quote_plus(value, safe='*').replace('~', '%7E'). Dates are MM-DD. Keys follow the order of SCHEMA. Empty fields are left out.",
+  "encode": [
+    {
+      "name": "skill receipts, every field",
+      "data": {
+        "platform": "claude-code",
+        "mode": "receipts",
+        "approx": false,
+        "year": 2026,
+        "name": "Ana",
+        "conversations": { "value": 1284, "approx": false },
+        "messages": { "value": 18422, "approx": false },
+        "activeDays": { "value": 247, "approx": false },
+        "streak": { "value": 31, "approx": false },
+        "streakRange": { "start": { "month": 9, "day": 1 }, "end": { "month": 10, "day": 1 } },
+        "busiestDay": { "month": 10, "day": 8 },
+        "busiestDayMessages": { "value": 386, "approx": false },
+        "latestClock": { "h": 4, "m": 12 },
+        "typicalHour": 22,
+        "nightShare": 27,
+        "wordsYou": { "value": 143208, "approx": false },
+        "wordsAi": { "value": 2914077, "approx": false },
+        "themes": [
+          { "name": "demo-app", "percent": 34 },
+          { "name": "demo-lib", "percent": 27 },
+          { "name": "Project C" }
+        ],
+        "thankYous": { "value": 506, "approx": false },
+        "sorrys": { "value": 21, "approx": false },
+        "absolutelyRight": { "value": 1093, "approx": false },
+        "persona": "BNVP",
+        "personaName": "The Night Shift Novelist",
+        "pivot": { "fromMonth": "Jan", "from": "Fix the build", "toMonth": "Oct", "to": "Plan the launch" },
+        "moments": [
+          { "month": "Jan", "text": "Wrote 40 commits in a day." },
+          { "month": "Mar", "text": "Fixed the deploy at 2 AM." }
+        ],
+        "roast": "You ask me for a plan, then do the opposite.",
+        "compliment": "You ship.",
+        "rankPercent": 2,
+        "power": "Terminal Velocity",
+        "tokensOut": { "value": 41800000, "approx": false },
+        "models": ["opus-5.5", "fable-5.1"],
+        "source": "skill"
+      },
+      "query": "v=1&p=claude-code&m=receipts&a=0&y=2026&n=Ana&c=1284&mg=18422&d=247&s=31&sr=09-01..10-01&bd=10-08&bm=386&lh=04%3A12&th=22&ns=27&wu=143208&wa=2914077&t=demo-app%3A34%2Cdemo-lib%3A27%2CProject+C&ty=506&so=21&ar=1093&pc=BNVP&pn=The+Night+Shift+Novelist&pv=Jan%7CFix+the+build%7COct%7CPlan+the+launch&mo=Jan%7CWrote+40+commits+in+a+day.%3BMar%7CFixed+the+deploy+at+2+AM.&ro=You+ask+me+for+a+plan%2C+then+do+the+opposite.&co=You+ship.&rk=2&pl=Terminal+Velocity&tk=41800000&md=opus-5.5%2Cfable-5.1&src=skill"
+    },
+    {
+      "name": "skill, only the required fields",
+      "data": {
+        "platform": "codex",
+        "mode": "receipts",
+        "approx": false,
+        "year": 2026,
+        "conversations": { "value": 3, "approx": false },
+        "source": "skill"
+      },
+      "query": "v=1&p=codex&m=receipts&a=0&y=2026&c=3&src=skill"
+    },
+    {
+      "name": "vibes link: a=1 needs no tilde, a range stays a range",
+      "data": {
+        "platform": "chatgpt",
+        "mode": "vibes",
+        "approx": true,
+        "year": 2026,
+        "conversations": { "value": 425, "lo": 400, "hi": 450, "approx": true },
+        "messages": { "value": 9870, "approx": true },
+        "source": "prompt"
+      },
+      "query": "v=1&p=chatgpt&m=vibes&a=1&y=2026&c=400-450&mg=9870&src=prompt"
+    },
+    {
+      "name": "exact link with one estimate: the tilde is %7E",
+      "data": {
+        "platform": "claude-code",
+        "mode": "receipts",
+        "approx": false,
+        "year": 2026,
+        "conversations": { "value": 12, "approx": false },
+        "messages": { "value": 400, "approx": true },
+        "source": "skill"
+      },
+      "query": "v=1&p=claude-code&m=receipts&a=0&y=2026&c=12&mg=%7E400&src=skill"
+    },
+    {
+      "name": "text escapes: tilde, star, slash, plus, percent, ampersand, apostrophe, parentheses, accent",
+      "data": {
+        "platform": "claude-code",
+        "mode": "receipts",
+        "approx": false,
+        "year": 2026,
+        "conversations": { "value": 1, "approx": false },
+        "roast": "~/code *is* 100% C++ & (mostly) don't ask, José",
+        "source": "skill"
+      },
+      "query": "v=1&p=claude-code&m=receipts&a=0&y=2026&c=1&ro=%7E%2Fcode+*is*+100%25+C%2B%2B+%26+%28mostly%29+don%27t+ask%2C+Jos%C3%A9&src=skill"
+    }
+  ],
+  "decode": [
+    {
+      "name": "a model link with a range and a tilde",
+      "input": "v=1&p=chatgpt&m=vibes&n=Ana&c=400-450&mg=~9870",
+      "ok": true,
+      "missing": [],
+      "expected": {
+        "platform": "chatgpt",
+        "mode": "vibes",
+        "approx": true,
+        "name": "Ana",
+        "conversations": { "value": 425, "lo": 400, "hi": 450, "approx": true },
+        "messages": { "value": 9870, "approx": true }
+      }
+    },
+    {
+      "name": "incomplete: no count",
+      "input": "v=1&p=claude",
+      "ok": false,
+      "missing": ["c", "mg"],
+      "expected": { "platform": "claude", "conversations": null, "messages": null }
+    },
+    {
+      "name": "the Python date form with a year",
+      "input": "p=claude-code&m=receipts&a=0&c=12&bd=2026-03-14&sr=2026-03-02_2026-03-24&src=skill",
+      "ok": true,
+      "missing": [],
+      "expected": {
+        "mode": "receipts",
+        "approx": false,
+        "busiestDay": { "month": 3, "day": 14 },
+        "streakRange": { "start": { "month": 3, "day": 2 }, "end": { "month": 3, "day": 24 } },
+        "source": "skill"
+      }
+    },
+    {
+      "name": "lenient values from a chat",
+      "input": "P=Claude%20Code&c=about 400&mg=1,284&lh=3:47 AM&th=11 PM&ns=0.38&rk=top 4%25&pc=tnvp&t=Code:42;Life admin&ro=“You ship.”)",
+      "ok": true,
+      "missing": [],
+      "expected": {
+        "platform": "claude-code",
+        "conversations": { "value": 400, "approx": true },
+        "messages": { "value": 1284, "approx": true },
+        "latestClock": { "h": 3, "m": 47 },
+        "typicalHour": 23,
+        "nightShare": 38,
+        "rankPercent": 4,
+        "persona": "TNVP",
+        "themes": [{ "name": "Code", "percent": 42 }, { "name": "Life admin" }],
+        "roast": "You ship."
+      }
+    },
+    {
+      "name": "a template with empty keys left in",
+      "input": "v=1&p=gemini&m=vibes&a=1&y=2026&n=&c=12&mg=&d=&s=&sr=&bd=&bm=&lh=&th=&ns=&wu=&wa=&t=&ty=&so=&ar=&pc=&pn=&pv=&mo=&ro=&co=&rk=&pl=",
+      "ok": true,
+      "missing": [],
+      "expected": { "platform": "gemini", "name": null, "themes": [], "moments": [], "persona": null }
+    }
+  ]
+}

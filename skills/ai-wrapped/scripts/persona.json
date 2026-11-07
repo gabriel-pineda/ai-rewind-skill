@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "axes": [
+    { "pair": ["B", "T"], "words": ["Builder", "Thinker"], "default": "B" },
+    { "pair": ["D", "N"], "words": ["day", "night"], "default": "D" },
+    { "pair": ["S", "V"], "words": ["short", "verbose"], "default": "S" },
+    { "pair": ["P", "R"], "words": ["polite", "rushed"], "default": "P" }
+  ],
+  "thresholds": {
+    "toolUsePerAssistantMessage": 0.6,
+    "nightShare": 25,
+    "typicalHour": 22,
+    "medianWords": 40,
+    "thanksPer100": 2
+  },
+  "types": {
+    "BDSP": { "name": "The Polite Shipper", "line": "Ships by daylight, in few words, and still says thanks." },
+    "BDSR": { "name": "The Ticket Closer", "line": "Ships by daylight, in few words, with no time for thanks." },
+    "BDVP": { "name": "The Daylight Foreman", "line": "Builds all day, explains every detail, and says please." },
+    "BDVR": { "name": "The Spec Machine", "line": "Builds all day, writes long briefs, and skips the small talk." },
+    "BNSP": { "name": "The Midnight Mechanic", "line": "Fixes things after dark, in few words, and says thanks." },
+    "BNSR": { "name": "The 2AM Hotfix", "line": "Fixes things after dark, in few words, and leaves no note." },
+    "BNVP": { "name": "The Night Shift Novelist", "line": "Builds after dark, in long messages, and says please." },
+    "BNVR": {
+      "name": "The Caffeinated Compiler",
+      "line": "Builds after dark, in long messages, and never stops to breathe."
+    },
+    "TDSP": { "name": "The Curious Regular", "line": "Asks good questions by day, keeps them short, and says thanks." },
+    "TDSR": { "name": "The Quick Question", "line": "Asks by day, keeps it short, and is gone before the reply ends." },
+    "TDVP": { "name": "The Office Philosopher", "line": "Thinks out loud all day, in paragraphs, and says please." },
+    "TDVR": { "name": "The Daytime Debater", "line": "Thinks out loud all day, in paragraphs, and wants answers now." },
+    "TNSP": { "name": "The Quiet Night Owl", "line": "Thinks after dark, in few words, and says thanks." },
+    "TNSR": { "name": "The Insomniac Oracle", "line": "Thinks after dark, in few words, and wants the answer first." },
+    "TNVP": { "name": "The 3AM Architect", "line": "Builds things at night, in paragraphs, and says please." },
+    "TNVR": {
+      "name": "The Midnight Monologue",
+      "line": "Thinks after dark, in paragraphs, and wants it done yesterday."
+    }
+  }
+}

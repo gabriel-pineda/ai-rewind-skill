@@ -1,0 +1,8 @@
+{"timestamp":"2026-04-10T01:00:00.000Z","type":"session_meta","payload":{"id":"cccccccc-0000-4000-8000-000000000001","cwd":"/Users/demo/app","originator":"codex_cli"}}
+{"timestamp":"2026-04-10T01:00:01.000Z","type":"turn_context","payload":{"cwd":"/Users/demo/app","model":"gpt-5.1-codex"}}
+{"timestamp":"2026-04-10T01:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>demo shell</environment_context>"}]}}
+{"timestamp":"2026-04-10T01:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"thanks for looking at the codex build"}]}}
+{"timestamp":"2026-04-10T01:00:03.000Z","type":"event_msg","payload":{"type":"user_message","message":"thanks for looking at the codex build"}}
+{"timestamp":"2026-04-10T01:00:09.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"You're right, the build needs a fresh cache."}]}}
+{"timestamp":"2026-04-10T01:00:10.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"ls\"]}"}}
+{"timestamp":"2026-04-10T01:00:11.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":77}}}}

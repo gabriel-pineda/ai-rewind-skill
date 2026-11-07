@@ -1,0 +1,15 @@
+# Tool settings only. The skill is a plain script, so there is nothing to install.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["UP006", "UP007", "UP035", "UP045"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["rewind", "helpers", "urlspec", "make_fixtures", "sync_codec_fixtures"]

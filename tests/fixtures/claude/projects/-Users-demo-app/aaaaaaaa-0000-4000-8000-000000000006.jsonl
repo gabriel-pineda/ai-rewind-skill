@@ -1,0 +1,2 @@
+{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"no human here"}]},"uuid":"u-t02","timestamp":"2026-06-22T08:00:00.000Z","cwd":"/Users/demo/app","sessionId":"aaaaaaaa-0000-4000-8000-000000000006"}
+{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"meta only here"},"uuid":"u-m02","timestamp":"2026-06-22T08:00:01.000Z","cwd":"/Users/demo/app","sessionId":"aaaaaaaa-0000-4000-8000-000000000006","isMeta":true}
