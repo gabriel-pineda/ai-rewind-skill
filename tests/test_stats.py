@@ -55,7 +55,7 @@ def test_fixture_numbers_are_exact():
 
 def test_report_shape():
     data = report()
-    assert list(data) == ["skill", "range", "stats", "seeds", "projects", "months", "url"]
+    assert list(data) == ["skill", "range", "coverage", "stats", "seeds", "projects", "months", "url"]
     assert data["skill"] == rewind.VERSION
     assert data["range"]["firstDay"] == "2026-03-02"
     assert data["range"]["lastDay"] == "2026-06-21"
@@ -101,7 +101,7 @@ def test_unknown_zone_exits_with_2():
     assert "time zone" in done.stderr
 
 
-def test_history_fallback():
+def test_history_only_has_no_ai_numbers():
     done = cli("--claude-dir", HISTORY_ONLY, "--tz", "UTC")
     assert done.returncode == 0
     assert "c=2&mg=2" in done.stdout
@@ -448,7 +448,8 @@ def test_history_only_numbers_are_exact():
     assert data["seeds"] == ["Top project took 100% of all messages", "1 message on Mar 2", "Said thanks 1 time"]
     assert data["url"] == (
         rewind.DEFAULT_SITE + "/r?v=1&p=claude-code&m=receipts&a=0&y=2026&c=2&mg=2&d=2&s=2&sr=03-02..03-03"
-        "&bd=03-02&bm=1&lh=09%3A00&th=9&ns=0&wu=7&t=app%3A100&ty=1&so=0&pc=TDSP&rk=90&pl=Rookie&src=skill"
+        "&bd=03-02&bm=1&lh=09%3A00&th=9&ns=0&wu=7&t=app%3A100&ty=1&so=0&pc=TDSP&rk=90&pl=Rookie&lf=2026-03-02"
+        "&src=skill"
     )
 
 

@@ -83,6 +83,8 @@ def fixture_message_text(root):
                     except ValueError:
                         continue
                     yield from texts((record.get("message") or {}).get("content"))
+                    # history.jsonl: the prompt text is in display.
+                    yield from texts(record.get("display"))
                     payload = record.get("payload") or {}
                     yield from texts(payload.get("content"))
                     yield from texts(payload.get("message"))

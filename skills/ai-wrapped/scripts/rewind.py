@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 # Change this to the final host at domain cut-over.
 DEFAULT_SITE = "https://ai-rewind.vercel.app"
 
@@ -41,15 +41,26 @@ MAX_COMPLIMENT = 100
 MAX_POWER = 24
 MAX_MODELS = 3
 MAX_DAYS = 366
-TRUNCATE_ORDER = ("mo", "ro", "co", "pv", "pn")
+MAX_EXAMPLES = 6
+MAX_EXAMPLE_TEXT = 32
+TRUNCATE_ORDER = ("mo", "ex", "ro", "co", "pv", "pn")
 # Same steps as encodeRewind: cut the text to 140, 132, ... 28 characters, then drop the field.
 SHORTEN_START = 140
 SHORTEN_FLOOR = 24
 SHORTEN_STEP = 8
 LAST_RESORT = TRUNCATE_ORDER + ("t", "pl", "md")
 CANONICAL_ORDER = (
-    "v p m a y n c mg d s sr bd bm lh th ns wu wa t ty so ar pc pn pv mo ro co rk pl tk md src"
+    "v p m a y n c mg d s sr bd bm lh th ns wu wa t ty so ar pc pn pv mo ex ro co rk pl tk md lf ff src"
 ).split()
+# The skill never writes ex: examples of what the user asked are chat text. The key is here so the
+# encoder stays the same as the web one.
+
+# History lines and transcript prompts closer than this, in the same session, are one prompt.
+DEDUPE_SECONDS = 5
+# An AI-side number scaled from the transcript window is shown as a range of this size around the estimate.
+ESTIMATE_SPREAD = 0.15
+# Fields that need the assistant side of the logs. history.jsonl holds prompts only.
+AI_FIELDS = ("wordsAi", "absolutelyRight", "greatQuestions", "tokensOut")
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -251,15 +262,19 @@ def fresh_enough(path: str, since: date) -> bool:
 
 
 def find_files(platform: str, root: str, since: date) -> Tuple[List[str], Optional[str]]:
-    """Returns (session files to read, history file to use when there are no session files)."""
+    """Returns (session files to read, history.jsonl or None).
+
+    Claude Code deletes session files after cleanupPeriodDays (30 by default), but history.jsonl keeps every
+    prompt. So the script always reads both and merges them.
+    """
     if platform == "codex":
         sessions = os.path.join(root, "sessions")
         return [path for path in walk_jsonl(sessions) if fresh_enough(path, since)], None
-    every = claude_sessions(root)
-    if every:
-        return [path for path in every if fresh_enough(path, since)], None
+    files = [path for path in claude_sessions(root) if fresh_enough(path, since)]
     history = os.path.join(root, "history.jsonl")
-    return [], history if os.path.isfile(history) else None
+    if not os.path.isfile(history) or os.path.islink(history) or not fresh_enough(history, since):
+        return files, None
+    return files, history
 
 
 # --- Projects -----------------------------------------------------------------------------------
@@ -404,6 +419,12 @@ class Tally:
         self.tool_uses = self.words_ai = self.right = self.great = 0
         self.tokens: Dict[str, int] = {}
         self.model_messages: Counter = Counter()
+        # Coverage. The window is the part of the range that the session files cover.
+        self.window_humans = 0
+        self.window_days: set = set()
+        self.prompt_seconds: Dict[str, set] = defaultdict(set)
+        self.history_lines = self.history_added = self.history_duplicates = 0
+        self.history_records = self.history_with_display = 0
 
     def localize(self, stamp) -> Optional[datetime]:
         moment = parse_stamp(stamp)
@@ -422,7 +443,22 @@ class Tally:
         self.seen_records.add(uuid)
         return True
 
-    def add_human(self, when: datetime, text: str, session: str, cwd: Optional[str]) -> None:
+    def note_prompt(self, session: str, moment: datetime) -> None:
+        """Remembers when a session file holds a prompt, so the same prompt in history.jsonl counts once."""
+        self.prompt_seconds[session].add(int(moment.timestamp()))
+
+    def known_prompt(self, session: str, moment: datetime) -> bool:
+        seconds = self.prompt_seconds.get(session)
+        if not seconds:
+            return False
+        second = int(moment.timestamp())
+        return any(second + offset in seconds for offset in range(-DEDUPE_SECONDS, DEDUPE_SECONDS + 1))
+
+    def add_human(self, when: datetime, text: str, session: str, cwd: Optional[str], window: bool = True) -> None:
+        """window is False for a prompt from history.jsonl, which has no reply next to it."""
+        if window:
+            self.window_humans += 1
+            self.window_days.add(when.date())
         day, hour = when.date(), when.hour
         project = self.names.name(cwd)
         self.humans += 1
@@ -480,9 +516,13 @@ def read_claude(path: str, tally: Tally) -> None:
             text = human_text(record)
             if text is None:
                 continue
+            session = str(record.get("sessionId") or path)
+            moment = parse_stamp(record.get("timestamp"))
+            if moment is not None:
+                tally.note_prompt(session, moment)
             when = tally.localize(record.get("timestamp"))
             if when is not None and tally.first_sight(record):
-                tally.add_human(when, text, path, record.get("cwd"))
+                tally.add_human(when, text, session, record.get("cwd"))
         elif kind == "assistant":
             if record.get("isSidechain") or record.get("isApiErrorMessage"):
                 continue
@@ -492,6 +532,7 @@ def read_claude(path: str, tally: Tally) -> None:
             when = tally.localize(record.get("timestamp"))
             if when is None or not tally.first_sight(record):
                 continue
+            tally.window_days.add(when.date())
             message_id = message.get("id") or record.get("uuid")
             if not message_id:
                 continue
@@ -502,14 +543,30 @@ def read_claude(path: str, tally: Tally) -> None:
 
 
 def read_history(path: str, tally: Tally) -> None:
-    """Fallback for a machine with history.jsonl but no project logs. Prompts only."""
+    """Adds the prompts in history.jsonl that the session files do not hold. Read it after the session files.
+
+    Each line is one prompt: display (the text), timestamp (ms), project (the folder) and sessionId. It has no
+    replies, so it adds to the human-side numbers only. A slash command or a ! shell line is not a prompt.
+    """
     for record in json_lines(path, claude_filter=False):
+        tally.history_records += 1
         text = record.get("display")
-        if not isinstance(text, str) or not text.strip() or text.lstrip().startswith("/"):
+        if not isinstance(text, str):
+            continue
+        tally.history_with_display += 1
+        text = text.strip()
+        if not text or text.startswith(("/", "!")):
             continue
         when = tally.localize(record.get("timestamp"))
-        if when is not None:
-            tally.add_human(when, text.strip(), str(record.get("sessionId") or path), record.get("project"))
+        if when is None:
+            continue
+        tally.history_lines += 1
+        session = str(record.get("sessionId") or path)
+        if tally.known_prompt(session, when):
+            tally.history_duplicates += 1
+            continue
+        tally.history_added += 1
+        tally.add_human(when, text, session, record.get("project"), window=False)
 
 
 def codex_text(content, kinds: Tuple[str, ...]) -> str:
@@ -644,6 +701,40 @@ def month_day(day: date) -> str:
     return f"{MONTHS[day.month - 1]} {day.day}"
 
 
+def scale_factor(tally: Tally) -> float:
+    """Full-range prompts per window prompt. 1 when the session files hold every prompt."""
+    if not tally.assistant_ids or not tally.window_humans or tally.humans <= tally.window_humans:
+        return 1.0
+    return tally.humans / tally.window_humans
+
+
+def estimates(tally: Tally) -> Dict[str, dict]:
+    """AI-side numbers for the full range: the rate per prompt in the window, times all prompts.
+
+    Empty when nothing is scaled. Each entry has the estimate, a range of 15 percent each side, and the
+    number that the window really holds.
+    """
+    factor = scale_factor(tally)
+    if factor == 1.0:
+        return {}
+    window = dict(
+        wordsAi=tally.words_ai,
+        absolutelyRight=tally.right,
+        greatQuestions=tally.great,
+        tokensOut=sum(tally.tokens.values()),
+    )
+    out = {}
+    for key in AI_FIELDS:
+        value = window[key] * factor
+        out[key] = {
+            "value": round_half_up(value),
+            "lo": round_half_up(value * (1 - ESTIMATE_SPREAD)),
+            "hi": round_half_up(value * (1 + ESTIMATE_SPREAD)),
+            "window": window[key],
+        }
+    return out
+
+
 def compute_stats(tally: Tally, table: dict) -> dict:
     messages = tally.humans
     active = len(tally.by_day)
@@ -659,6 +750,11 @@ def compute_stats(tally: Tally, table: dict) -> dict:
     late_hour, late_minute = tally.latest
     models = [short_model(model) for model, _ in tally.model_messages.most_common()]
     unique_models = list(dict.fromkeys(models))
+    scaled = estimates(tally)
+
+    def ai(key: str, raw: int) -> int:
+        return scaled[key]["value"] if key in scaled else raw
+
     return {
         "conversations": len(tally.sessions),
         "messages": messages,
@@ -673,12 +769,12 @@ def compute_stats(tally: Tally, table: dict) -> dict:
         "typicalHour": hour,
         "nightShare": night_share,
         "wordsYou": sum(tally.human_words),
-        "wordsAi": tally.words_ai,
+        "wordsAi": ai("wordsAi", tally.words_ai),
         "thankYous": tally.thanks,
         "sorrys": tally.sorrys,
-        "absolutelyRight": tally.right,
-        "greatQuestions": tally.great,
-        "tokensOut": sum(tally.tokens.values()),
+        "absolutelyRight": ai("absolutelyRight", tally.right),
+        "greatQuestions": ai("greatQuestions", tally.great),
+        "tokensOut": ai("tokensOut", sum(tally.tokens.values())),
         "models": unique_models[:MAX_MODELS],
         "toolUsePerAssistantMessage": round(tools_per_message, 3),
         "medianWords": median_words,
@@ -748,7 +844,9 @@ def roast_seeds(tally: Tally, stats: dict, projects: List[dict]) -> List[str]:
     busiest = date.fromisoformat(stats["busiestDay"])
     seeds.append(f"{plural(stats['busiestDayMessages'], 'message')} on {month_day(busiest)}")
     if stats["models"] and stats["wordsAi"]:
-        seeds.append(f"{stats['models'][0]} wrote {plural(stats['wordsAi'], 'word')}; you wrote {stats['wordsYou']}")
+        about = "about " if scale_factor(tally) != 1.0 else ""
+        words = plural(stats["wordsAi"], "word")
+        seeds.append(f"{stats['models'][0]} wrote {about}{words}; you wrote {stats['wordsYou']}")
     if not tally.late_thanks:
         seeds.append(f"Said thanks {plural(tally.thanks, 'time')}")
     return seeds[:3]
@@ -878,7 +976,14 @@ def render(fields: Dict[str, object]) -> str:
         value = fields.get(key)
         if value is None or value == "" or value == []:
             continue
-        text = render_moments(value) if key == "mo" else ",".join(value) if key in ("t", "md") else str(value)
+        if key == "mo":
+            text = render_moments(value)
+        elif key in ("t", "md"):
+            text = ",".join(value)
+        elif key == "ex":
+            text = ";".join(value)
+        else:
+            text = str(value)
         pairs.append(f"{key}={form_encode(text)}")
     return "&".join(pairs)
 
@@ -890,6 +995,10 @@ def shortened(fields: Dict[str, object], key: str, limit: int) -> Optional[Dict[
         if not value or not any(len(text) > limit for _, text in value):
             return None
         return {**fields, key: [(month, cap(text, limit)) for month, text in value]}
+    if key == "ex":
+        if not value or not any(len(text) > limit for text in value):
+            return None
+        return {**fields, key: [cap(text, limit) for text in value]}
     if not value or len(str(value)) <= limit:
         return None
     return {**fields, key: cap(str(value), limit)}
@@ -900,13 +1009,13 @@ def dropped(fields: Dict[str, object], key: str) -> Optional[Dict[str, object]]:
     value = fields.get(key)
     if not value:
         return None
-    if key in ("mo", "t"):
+    if key in ("mo", "ex", "t"):
         return {**fields, key: value[:-1]}
     return {**fields, key: None}
 
 
 def fit_query(fields: Dict[str, object], limit: int = ENCODE_MAX) -> str:
-    """Same steps as encodeRewind: shorten mo, ro, co, pv, pn, then drop them, then t, pl and md."""
+    """Same steps as encodeRewind: shorten mo, ex, ro, co, pv, pn, then drop them, then t, pl and md."""
     query = render(fields)
     for key in TRUNCATE_ORDER:
         text_limit = SHORTEN_START
@@ -926,7 +1035,14 @@ def fit_query(fields: Dict[str, object], limit: int = ENCODE_MAX) -> str:
     return query
 
 
-def build_fields(args, stats: dict, projects: List[dict]) -> Dict[str, object]:
+def approx_value(estimate: dict) -> str:
+    """lo-hi, which the web codec reads as an estimate with a range. ~N when the range is one number."""
+    if estimate["lo"] == estimate["hi"]:
+        return f"~{estimate['value']}"
+    return f"{estimate['lo']}-{estimate['hi']}"
+
+
+def build_fields(args, stats: dict, projects: List[dict], coverage: Optional[dict] = None) -> Dict[str, object]:
     fields: Dict[str, object] = {
         "v": 1,
         "p": args.platform,
@@ -961,7 +1077,36 @@ def build_fields(args, stats: dict, projects: List[dict]) -> Dict[str, object]:
     if stats["assistantMessages"]:
         fields.update(wa=stats["wordsAi"], ar=stats["absolutelyRight"], tk=stats["tokensOut"])
         fields["md"] = [clean_text(re.sub(r"[,;]", " ", name), MAX_PERSONA_NAME) for name in stats["models"]]
+    coverage = coverage or {}
+    # Scaled from the window: an estimate with a range, never a plain number.
+    for key, field in (("wa", "wordsAi"), ("ar", "absolutelyRight"), ("tk", "tokensOut")):
+        estimate = coverage.get("estimated", {}).get(field)
+        if key in fields and estimate:
+            fields[key] = approx_value(estimate)
+    # The dates go in only when the prompts start before the full logs, so the story can say so.
+    if coverage.get("merged") and coverage.get("promptsFrom") != coverage.get("fullLogsFrom"):
+        fields["lf"] = coverage.get("promptsFrom")
+        fields["ff"] = coverage.get("fullLogsFrom")
     return fields
+
+
+def coverage_report(tally: Tally, files: List[str], history: Optional[str]) -> dict:
+    """What the logs cover. Prompts: session files and history.jsonl. Full logs (with replies): session files."""
+    days = sorted(tally.by_day)
+    window = sorted(tally.window_days)
+    return {
+        "promptsFrom": days[0].isoformat() if days else None,
+        "promptsTo": days[-1].isoformat() if days else None,
+        "fullLogsFrom": window[0].isoformat() if window else None,
+        "fullLogsTo": window[-1].isoformat() if window else None,
+        "transcriptFiles": len(files),
+        "historyFile": history is not None,
+        "historyLines": tally.history_lines,
+        "merged": tally.history_added,
+        "duplicates": tally.history_duplicates,
+        "windowMessages": tally.window_humans,
+        "estimated": estimates(tally),
+    }
 
 
 def normalize_site(raw: Optional[str]) -> str:
@@ -1017,6 +1162,11 @@ def run(args) -> int:
         reader(path, tally)
     if history:
         read_history(history, tally)
+        if tally.history_records and not tally.history_with_display:
+            print(
+                "history.jsonl has no prompt text field (an older Claude Code). Using the session files only.",
+                file=sys.stderr,
+            )
     if not tally.humans:
         print(f"No sessions found in {root} from {args.since} to {args.until}.", file=sys.stderr)
         return 2
@@ -1024,8 +1174,9 @@ def run(args) -> int:
     table = load_persona_table()
     stats = compute_stats(tally, table)
     projects, labels = project_shares(tally, args.anon)
+    coverage = coverage_report(tally, files, history)
     site = normalize_site(args.site)
-    url = f"{site}/r?{fit_query(build_fields(args, stats, projects))}"
+    url = f"{site}/r?{fit_query(build_fields(args, stats, projects, coverage))}"
     if not args.json:
         print(url)
         return 0
@@ -1038,6 +1189,7 @@ def run(args) -> int:
             "firstDay": days[0].isoformat(),
             "lastDay": days[-1].isoformat(),
         },
+        "coverage": coverage,
         "stats": stats,
         "seeds": roast_seeds(tally, stats, projects),
         "projects": projects,

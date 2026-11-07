@@ -15,7 +15,7 @@ Claude runs the script, asks for your first name, writes a short roast from the 
 | Reads | Why |
 | --- | --- |
 | `~/.claude/projects/*/*.jsonl` | Your sessions: timestamps, counts, models, project folders |
-| `~/.claude/history.jsonl` | Only when there are no session files |
+| `~/.claude/history.jsonl` | Every prompt you typed, with its time, folder and session. The script counts them and keeps no text |
 | `~/.codex/sessions/**/*.jsonl` | Only with `--platform codex` (experimental) |
 
 To see the exact files, run this. It prints paths and reads no log:
@@ -24,7 +24,16 @@ To see the exact files, run this. It prints paths and reads no log:
 python3 -I skills/ai-wrapped/scripts/rewind.py --since 2026-01-01 --dry-run
 ```
 
-Claude Code removes old logs, by default after 30 days. The story can only show what is still on disk. Set `cleanupPeriodDays` in your Claude Code settings to keep more for next year.
+### Why some numbers have a ~
+
+Claude Code deletes old session files, by default after 30 days (the `cleanupPeriodDays` setting). It keeps `history.jsonl`, which has every prompt you typed but no replies. So the script reads both:
+
+- Your side (conversations, messages, days, streak, hours, thank-yous, projects) is exact for the full range. It counts each prompt once: a history line within 5 seconds of a prompt in a session file of the same session is the same prompt.
+- The AI side (AI words, "absolutely right", tokens) exists only in the session files. The script measures it per prompt in those files and multiplies by all your prompts. The link shows it as a range, and the story marks it with ~.
+
+`--json` has a `coverage` block with the dates: `promptsFrom` (history start) and `fullLogsFrom` (session files start). Claude tells you both in one line.
+
+To keep full logs for next year, set `"cleanupPeriodDays": 400` in `~/.claude/settings.json`. The skill offers to do this and asks first.
 
 ## Privacy
 

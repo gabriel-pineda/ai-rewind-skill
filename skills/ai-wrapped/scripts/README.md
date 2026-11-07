@@ -27,18 +27,37 @@ python3 -I rewind.py --since 2026-01-01 --json      # stats, seeds and projects
 | `--dry-run` | Print the file paths, then stop | Off |
 | `--version` | Print the version | |
 
-Exit codes: 0 means success. 2 means no sessions in range, a bad flag or an unknown zone.
+Exit codes: 0 means success. 2 means no sessions in range, a bad flag or an unknown zone. If `history.jsonl` has no `display` field (an older Claude Code), the script prints a note on stderr and uses the session files only.
+
+## Sources
+
+For Claude Code the script always reads two sources and merges them:
+
+1. The session files, `projects/*/*.jsonl`. They hold prompts and replies, but Claude Code deletes them after `cleanupPeriodDays` (30 by default). The days they cover are the **window**.
+2. `history.jsonl`. One line per prompt: `display`, `timestamp` (ms), `project`, `sessionId`. Claude Code keeps it. It has no replies.
+
+The session files go first. Then each history line is added unless the same `sessionId` has a session-file prompt within 5 seconds. Slash commands (`/`) and shell lines (`!`) in history are not prompts.
+
+All human-side stats use the merged prompts, so they are exact for the full range. AI-side stats (`wordsAi`, `absolutelyRight`, `greatQuestions`, `tokensOut`) exist only in the window. When history adds prompts, the script scales them: the count in the window, divided by the window prompts, times all prompts. The URL then carries a range of 15 percent each side (`wa=40-55`), which the site reads as an estimate. A range of one number is `~N`. Ratios (tools per assistant message) and the models list come from the window unscaled.
 
 ## Output
 
-The default output is one URL. Its query carries `m=receipts&a=0&src=skill`. The format is the URL spec of the web app: canonical key order, `URLSearchParams` encoding, and at most 1,500 characters in the query. If the text is too long, the script shortens `mo`, then `ro`, `co`, `pv` and `pn`.
+The default output is one URL. Its query carries `m=receipts&a=0&src=skill`. The format is the URL spec of the web app: canonical key order, `URLSearchParams` encoding, and at most 1,500 characters in the query. If the text is too long, the script shortens `mo`, then `ex`, `ro`, `co`, `pv` and `pn`. The script never writes `ex` (examples of what you asked are chat text); the key is there so that the encoder matches the web one.
+
+When history starts before the session files, the URL also carries `lf` (prompts from, `YYYY-MM-DD`) and `ff` (full logs from). With history only, it carries `lf` only.
 
 `--json` prints this object:
 
 ```json
 {
-  "skill": "1.0.0",
+  "skill": "1.1.0",
   "range": { "since": "", "until": "", "firstDay": "", "lastDay": "" },
+  "coverage": {
+    "promptsFrom": "2026-03-09", "promptsTo": "", "fullLogsFrom": "2026-10-08", "fullLogsTo": "",
+    "transcriptFiles": 0, "historyFile": true, "historyLines": 0, "merged": 0, "duplicates": 0,
+    "windowMessages": 0,
+    "estimated": { "wordsAi": { "value": 0, "lo": 0, "hi": 0, "window": 0 } }
+  },
   "stats": { "conversations": 0, "messages": 0, "persona": "BDSP" },
   "seeds": ["three plain facts"],
   "projects": [{ "name": "", "share": 0 }],
@@ -47,14 +66,16 @@ The default output is one URL. Its query carries `m=receipts&a=0&src=skill`. The
 }
 ```
 
+`coverage.historyLines` is the number of history prompts in range, `merged` the ones added, and `duplicates` the ones that the session files already had. `estimated` is empty when nothing is scaled. In `stats`, a scaled field holds the estimate.
+
 ## What counts
 
 | Stat | Rule |
 | --- | --- |
-| Conversation | A top-level session file with at least one human message in range. |
+| Conversation | One `sessionId` with at least one human message in range, from a session file or from `history.jsonl`. |
 | Human message | A `user` record with a text part. Not meta, sidechain, compaction summary, tool result, slash command output, shell output or interrupt notice. If `origin.kind` exists, it must be `human`. |
 | Assistant message | One unique `message.id`, across all the log lines that share it. Subagent files and sidechain records do not count. |
-| Duplicates | A resumed session copies old records into a new file. A record `uuid` counts once. |
+| Duplicates | A resumed session copies old records into a new file. A record `uuid` counts once. A history line within 5 seconds of a session-file prompt of the same session counts once. |
 | Active days, streak | Local dates with a human message. Longest run of consecutive dates. |
 | Latest hour | Hours before 06:00 count as later than 23:59. |
 | Typical hour | The most common hour. A tie goes to the later hour. |

@@ -7,10 +7,14 @@ canonical form, because a lenient decoder would hide a mistake.
 import re
 from urllib.parse import parse_qsl, urlsplit
 
-KEYS = "v p m a y n c mg d s sr bd bm lh th ns wu wa t ty so ar pc pn pv mo ro co rk pl tk md src".split()
+KEYS = "v p m a y n c mg d s sr bd bm lh th ns wu wa t ty so ar pc pn pv mo ex ro co rk pl tk md lf ff src".split()
 MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
 INTEGER = re.compile(r"^\d+$")
-NUMBER_KEYS = "c mg d s bm wu wa ty so ar tk".split()
+NUMBER_KEYS = "c mg d s bm wu ty so".split()
+# AI-side numbers. Scaled from the session-file window, they are an estimate: lo-hi or ~N.
+APPROX_KEYS = "wa ar tk".split()
+APPROX = re.compile(r"^(?:\d+|~\d+|(\d+)-(\d+))$")
+DAY = re.compile(r"^2\d{3}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 
 
 def split_url(url):
@@ -35,6 +39,18 @@ def decode(url):
     for key in NUMBER_KEYS:
         if key in data:
             assert INTEGER.match(data[key]), key
+    for key in APPROX_KEYS:
+        if key in data:
+            match = APPROX.match(data[key])
+            assert match, key
+            if match.group(1):
+                assert int(match.group(1)) <= int(match.group(2)), key
+    for key in ("lf", "ff"):
+        if key in data:
+            assert DAY.match(data[key]), key
+    if "lf" in data and "ff" in data:
+        assert data["lf"] < data["ff"]
+    assert "ex" not in data, "the skill never writes examples"
     if "d" in data:
         assert int(data["d"]) <= 366
     if "s" in data:

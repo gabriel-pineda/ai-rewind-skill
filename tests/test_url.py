@@ -192,7 +192,7 @@ def test_last_resort_removes_themes_from_the_end():
 
 
 def test_truncation_order_is_the_one_in_the_spec():
-    assert rewind.TRUNCATE_ORDER == ("mo", "ro", "co", "pv", "pn")
+    assert rewind.TRUNCATE_ORDER == ("mo", "ex", "ro", "co", "pv", "pn")
 
 
 def test_every_key_in_the_spec_order_is_known():
@@ -269,7 +269,17 @@ def fields_from_rewind_data(data):
         "tk": stat_text(data.get("tokensOut"), approx),
         "md": data.get("models") or [],
         "src": data["source"],
+        "ex": [rewind.clean_text(text, rewind.MAX_EXAMPLE_TEXT) for text in data.get("examples") or []],
+        "lf": iso_day(data.get("logsFrom")),
+        "ff": iso_day(data.get("fullLogsFrom")),
     }
+
+
+def iso_day(value):
+    """A date from the shared fixture: a YYYY-MM-DD string or a {year, month, day} object."""
+    if not value or isinstance(value, str):
+        return value or None
+    return f"{value['year']:04d}-{value['month']:02d}-{value['day']:02d}"
 
 
 FIXTURE_COPY = os.path.join(FIXTURES, "codec-fixtures.json")

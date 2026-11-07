@@ -150,6 +150,6 @@ def test_codex_dry_run_lists_rollouts():
     assert len(done.stdout.splitlines()) == 1
 
 
-def test_history_is_the_fallback_when_there_are_no_project_logs():
+def test_dry_run_lists_history_when_there_are_no_project_logs():
     done = cli("--claude-dir", HISTORY_ONLY, "--dry-run")
     assert done.stdout.strip().endswith("history.jsonl")

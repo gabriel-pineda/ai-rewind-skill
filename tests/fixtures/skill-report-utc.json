@@ -1,10 +1,23 @@
 {
-  "skill": "1.0.0",
+  "skill": "1.1.0",
   "range": {
     "since": "2026-01-01",
     "until": "2026-12-31",
     "firstDay": "2026-03-02",
     "lastDay": "2026-06-21"
+  },
+  "coverage": {
+    "promptsFrom": "2026-03-02",
+    "promptsTo": "2026-06-21",
+    "fullLogsFrom": "2026-03-02",
+    "fullLogsTo": "2026-06-21",
+    "transcriptFiles": 6,
+    "historyFile": false,
+    "historyLines": 0,
+    "merged": 0,
+    "duplicates": 0,
+    "windowMessages": 11,
+    "estimated": {}
   },
   "stats": {
     "conversations": 4,
@@ -26,7 +39,10 @@
     "absolutelyRight": 2,
     "greatQuestions": 1,
     "tokensOut": 110,
-    "models": ["opus-5.5", "haiku-3.5"],
+    "models": [
+      "opus-5.5",
+      "haiku-3.5"
+    ],
     "toolUsePerAssistantMessage": 0.75,
     "medianWords": 6,
     "thanksPer100": 27.27,
