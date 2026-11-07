@@ -424,6 +424,9 @@ class Tally:
         self.window_days: set = set()
         self.prompt_seconds: Dict[str, set] = defaultdict(set)
         self.history_lines = self.history_added = self.history_duplicates = 0
+        # History prompts added inside the full-log window. The session files should hold these, so a high number
+        # means the dedupe missed some (for example a resumed session whose old file is gone).
+        self.history_added_window = 0
         self.history_records = self.history_with_display = 0
 
     def localize(self, stamp) -> Optional[datetime]:
@@ -443,16 +446,27 @@ class Tally:
         self.seen_records.add(uuid)
         return True
 
-    def note_prompt(self, session: str, moment: datetime) -> None:
-        """Remembers when a session file holds a prompt, so the same prompt in history.jsonl counts once."""
-        self.prompt_seconds[session].add(int(moment.timestamp()))
+    def note_prompt(self, session: str, moment: datetime, cwd: Optional[str] = None) -> None:
+        """Remembers when a session file holds a prompt, so the same prompt in history.jsonl counts once.
 
-    def known_prompt(self, session: str, moment: datetime) -> bool:
-        seconds = self.prompt_seconds.get(session)
-        if not seconds:
-            return False
+        It is kept by session and by project folder. A resumed session copies old prompts into a new file under a
+        new sessionId, and the old file can be gone, so history.jsonl (old sessionId) can match only by folder.
+        """
         second = int(moment.timestamp())
-        return any(second + offset in seconds for offset in range(-DEDUPE_SECONDS, DEDUPE_SECONDS + 1))
+        self.prompt_seconds[session].add(second)
+        if isinstance(cwd, str) and cwd:
+            self.prompt_seconds["cwd\0" + cwd].add(second)
+
+    def known_prompt(self, session: str, moment: datetime, project: Optional[str] = None) -> bool:
+        keys = [session]
+        if isinstance(project, str) and project:
+            keys.append("cwd\0" + project)
+        second = int(moment.timestamp())
+        for key in keys:
+            seconds = self.prompt_seconds.get(key)
+            if seconds and any(second + offset in seconds for offset in range(-DEDUPE_SECONDS, DEDUPE_SECONDS + 1)):
+                return True
+        return False
 
     def add_human(self, when: datetime, text: str, session: str, cwd: Optional[str], window: bool = True) -> None:
         """window is False for a prompt from history.jsonl, which has no reply next to it."""
@@ -519,7 +533,7 @@ def read_claude(path: str, tally: Tally) -> None:
             session = str(record.get("sessionId") or path)
             moment = parse_stamp(record.get("timestamp"))
             if moment is not None:
-                tally.note_prompt(session, moment)
+                tally.note_prompt(session, moment, record.get("cwd"))
             when = tally.localize(record.get("timestamp"))
             if when is not None and tally.first_sight(record):
                 tally.add_human(when, text, session, record.get("cwd"))
@@ -562,10 +576,12 @@ def read_history(path: str, tally: Tally) -> None:
             continue
         tally.history_lines += 1
         session = str(record.get("sessionId") or path)
-        if tally.known_prompt(session, when):
+        if tally.known_prompt(session, when, record.get("project")):
             tally.history_duplicates += 1
             continue
         tally.history_added += 1
+        if tally.window_days and min(tally.window_days) <= when.date() <= max(tally.window_days):
+            tally.history_added_window += 1
         tally.add_human(when, text, session, record.get("project"), window=False)
 
 
@@ -725,11 +741,13 @@ def estimates(tally: Tally) -> Dict[str, dict]:
     )
     out = {}
     for key in AI_FIELDS:
-        value = window[key] * factor
+        value = round_half_up(window[key] * factor)
+        # Symmetric around the rounded value: the web shows the midpoint of lo-hi, so it must be the estimate.
+        spread = round_half_up(value * ESTIMATE_SPREAD)
         out[key] = {
-            "value": round_half_up(value),
-            "lo": round_half_up(value * (1 - ESTIMATE_SPREAD)),
-            "hi": round_half_up(value * (1 + ESTIMATE_SPREAD)),
+            "value": value,
+            "lo": value - spread,
+            "hi": value + spread,
             "window": window[key],
         }
     return out
@@ -1104,6 +1122,7 @@ def coverage_report(tally: Tally, files: List[str], history: Optional[str]) -> d
         "historyLines": tally.history_lines,
         "merged": tally.history_added,
         "duplicates": tally.history_duplicates,
+        "mergedInWindow": tally.history_added_window,
         "windowMessages": tally.window_humans,
         "estimated": estimates(tally),
     }

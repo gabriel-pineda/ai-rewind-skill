@@ -31,10 +31,11 @@ def test_coverage_block():
         "historyLines": 13,  # 16 lines: one is from 2025, one is /clear, one is a ! shell line.
         "merged": 9,
         "duplicates": 4,  # Three W1 prompts (0 s, +3 s, -4 s) and one W2 prompt (+1 s).
+        "mergedInWindow": 2,  # X1 (another project) and the W2 line 6 s off: both are new prompts.
         "windowMessages": 5,
         "estimated": {
-            "wordsAi": {"value": 48, "lo": 40, "hi": 55, "window": 17},
-            "absolutelyRight": {"value": 3, "lo": 2, "hi": 3, "window": 1},
+            "wordsAi": {"value": 48, "lo": 41, "hi": 55, "window": 17},
+            "absolutelyRight": {"value": 3, "lo": 3, "hi": 3, "window": 1},
             "greatQuestions": {"value": 0, "lo": 0, "hi": 0, "window": 0},
             "tokensOut": {"value": 280, "lo": 238, "hi": 322, "window": 100},
         },
@@ -68,8 +69,8 @@ def test_ai_numbers_are_scaled_from_the_window():
 def test_url_marks_estimates_and_dates():
     data = merged()
     decoded = urlspec.decode(data["url"])
-    assert decoded["wa"] == "40-55"
-    assert decoded["ar"] == "2-3"
+    assert decoded["wa"] == "41-55"
+    assert decoded["ar"] == "~3"
     assert decoded["tk"] == "238-322"
     assert decoded["lf"] == "2026-03-09"
     assert decoded["ff"] == "2026-10-08"
@@ -141,3 +142,27 @@ def test_output_never_holds_history_text():
         for text in prompts:
             for start in range(max(0, len(text) - 12)):
                 assert text[start : start + 13] not in output
+
+
+def test_web_midpoint_of_each_range_is_the_estimate():
+    """The web codec shows round((lo + hi) / 2). It must equal the value that --json prints."""
+    for key, estimate in merged()["coverage"]["estimated"].items():
+        assert int((estimate["lo"] + estimate["hi"]) / 2 + 0.5) == estimate["value"], key
+    for value in range(0, 500):
+        tally_value = rewind.round_half_up(value)
+        spread = rewind.round_half_up(tally_value * rewind.ESTIMATE_SPREAD)
+        assert int(((tally_value - spread) + (tally_value + spread)) / 2 + 0.5) == tally_value
+
+
+def test_resumed_session_prompt_counts_once():
+    """A resumed session copies a prompt into a new file under a new sessionId. The old file is gone, so the
+    history line (old sessionId) matches by project folder and time only."""
+    from datetime import date, datetime, timezone
+
+    tally = rewind.Tally(date(2026, 1, 1), date(2026, 12, 31), timezone.utc, rewind.ProjectNames("/nonexistent"))
+    moment = datetime(2026, 10, 8, 10, 0, 0, tzinfo=timezone.utc)
+    tally.note_prompt("new-session", moment, "/work/app")
+    assert tally.known_prompt("old-session", moment, "/work/app")
+    assert not tally.known_prompt("old-session", moment, "/work/notes")
+    later = datetime(2026, 10, 8, 10, 0, 6, tzinfo=timezone.utc)
+    assert not tally.known_prompt("old-session", later, "/work/app")

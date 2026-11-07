@@ -14,6 +14,7 @@ This skill turns the user's local logs into one link that plays their year as a 
 - It never puts chat text in its output. The script prints numbers, dates, model names and project folder names.
 - The link holds the numbers in its query string. There is no account and no upload. The numbers reach the site only when someone opens the link.
 - You must not read the log files. The script gives you all that you need.
+- The script writes no files. Only if the user says yes in step 1b, you change one setting (`cleanupPeriodDays`) in `~/.claude/settings.json`.
 
 `scripts/rewind.py` sits next to this file. Use its full path in the commands below. Use `python3 -I`, so that Python does not load code from the current folder.
 
@@ -37,9 +38,11 @@ Tell the user the coverage in one line. Use the dates in `coverage`, written as 
 
 Do this step only if `coverage.fullLogsFrom` is later than `coverage.promptsFrom`, or is null.
 
+Read the current value of `cleanupPeriodDays` in `~/.claude/settings.json` first. If it is 400 or more, skip this step: a smaller value would make Claude Code delete more logs.
+
 Explain in one sentence: Claude Code deletes session files after `cleanupPeriodDays` days (30 by default), so next year's Wrapped can have exact AI-side numbers only if that number is larger.
 
-Then ask: "Do you want me to set `cleanupPeriodDays` to 400 in `~/.claude/settings.json`?" Show the exact change:
+Then ask: "Do you want me to change `cleanupPeriodDays` from <current value, or 30 by default> to 400 in `~/.claude/settings.json`?" Show the exact change:
 
 ```json
 {
